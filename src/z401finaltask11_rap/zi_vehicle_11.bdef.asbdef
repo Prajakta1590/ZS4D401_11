@@ -1,0 +1,43 @@
+managed implementation in class zbp_i_vehicle_11 unique;
+strict ( 2 );
+with draft;
+define behavior for ZI_VEHICLE_11 alias Vehicle
+persistent table zvehicle_11
+draft table zdvehicle_11 // <--- DRAFT TABLE NAME
+lock master total etag LastChangedAt
+authorization master ( instance )
+etag master LocalLastChangedAt
+{
+  create;
+  update;
+  delete;
+  field ( numbering : managed, readonly ) VehicleUUID;
+  field ( readonly ) CreatedBy, CreatedAt, LastChangedBy, LastChangedAt, LocalLastChangedAt;
+  // Standard Draft Actions (Required!)
+  draft action Edit;
+  draft action Activate optimized;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare {
+    validation validateCargo;
+  }
+  // Aufgabe 5: Prevent saving trucks with cargo < 2 tons
+  validation validateCargo on save { field Cargo, VehicleType; create; update; }
+  mapping for zvehicle_11
+  {
+    VehicleUUID        = vehicle_uuid;
+    VehicleType        = vehicle_type;
+    Make               = make;
+    Model              = model;
+    Price              = price;
+    Currency           = currency;
+    Color              = color;
+    Cargo              = cargo;
+    Seats              = seats;
+    CreatedBy          = created_by;
+    CreatedAt          = created_at;
+    LastChangedBy      = last_changed_by;
+    LastChangedAt      = last_changed_at;
+    LocalLastChangedAt = local_last_changed_at;
+  }
+}

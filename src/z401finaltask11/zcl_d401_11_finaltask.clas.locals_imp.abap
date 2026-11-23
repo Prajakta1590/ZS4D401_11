@@ -74,7 +74,9 @@ CLASS lcl_rental DEFINITION.
       display_all
         IMPORTING io_out TYPE REF TO if_oo_adt_classrun_out,
       get_max_cargo_truck
-        RETURNING VALUE(ro_truck) TYPE REF TO lcl_truck.
+        RETURNING VALUE(ro_truck) TYPE REF TO lcl_truck,
+         save_to_fiori_db
+           IMPORTING io_out TYPE REF TO if_oo_adt_classrun_out.
   PRIVATE SECTION.
     DATA: mt_vehicles TYPE TABLE OF REF TO lcl_vehicle.
 ENDCLASS.
@@ -103,8 +105,10 @@ CLASS lcl_truck IMPLEMENTATION.
     mv_cargo = iv_cargo.
 
     "Aufgabe 5: Raise exception if cargo < 2 tons
-    IF mv_cargo < 2.
-      RAISE EXCEPTION TYPE zcx_d401_11_failed.
+      IF mv_cargo < 2.
+      RAISE EXCEPTION TYPE zcx_d401_11_failed
+        MESSAGE e001(Z401FINALTASK11)
+        WITH |{ mv_cargo }| mv_model.
     ENDIF.
   ENDMETHOD.
   METHOD display_attributes.
@@ -144,30 +148,36 @@ ENDCLASS.
 
 "-- lcl_rental ------------------------------------------------------
 CLASS lcl_rental IMPLEMENTATION.
+
   METHOD add_vehicle.
     APPEND io_vehicle TO mt_vehicles.
   ENDMETHOD.
   METHOD display_all.
     DATA: lo_truck TYPE REF TO lcl_truck,
           lo_bus   TYPE REF TO lcl_bus.
+
     LOOP AT mt_vehicles INTO DATA(lo_vehicle).
       "Try truck
-      TRY.
-        lo_truck ?= lo_vehicle.   "DOWNCAST attempt
-        io_out->write( |TRUCK  | &&
-                    |Make: { lo_truck->mv_make }  | &&
-                    |Model: { lo_truck->mv_model }  | &&
-                    |Cargo: { lo_truck->mv_cargo } t| ).
+       TRY.
+        lo_truck ?= lo_vehicle.
+        io_out->write( |TRUCK |                             &&
+                       |Make: { lo_truck->mv_make } |       &&
+                       |Model: { lo_truck->mv_model } |     &&
+                       |Price: { lo_truck->mv_price } EUR | &&
+                       |Color: { lo_truck->mv_color } |     &&
+                       |Cargo: { lo_truck->mv_cargo } t| ).
         CONTINUE.
       CATCH cx_sy_move_cast_error.
       ENDTRY.
       "Try bus
       TRY.
         lo_bus ?= lo_vehicle.
-         io_out->write( |BUS    | &&
-                    |Make: { lo_bus->mv_make }  | &&
-                    |Model: { lo_bus->mv_model }  | &&
-                    |Seats: { lo_bus->mv_seats }| ).
+        io_out->write( |BUS   |                           &&
+                       |Make: { lo_bus->mv_make } |       &&
+                       |Model: { lo_bus->mv_model } |     &&
+                       |Price: { lo_bus->mv_price } EUR | &&
+                       |Color: { lo_bus->mv_color } |     &&
+                       |Seats: { lo_bus->mv_seats }| ).
       CATCH cx_sy_move_cast_error.
       ENDTRY.
     ENDLOOP.
@@ -186,5 +196,45 @@ CLASS lcl_rental IMPLEMENTATION.
         CONTINUE.                         "It's a bus, skip
       ENDTRY.
     ENDLOOP.
-  ENDMETHOD.
+    ENDMETHOD.
+      METHOD save_to_fiori_db.
+    DATA lt_db TYPE TABLE OF zvehicle_11.
+    GET TIME STAMP FIELD DATA(lv_timestamp).
+
+    "Loop over all vehicles already in the rental fleet
+    LOOP AT mt_vehicles INTO DATA(lo_vehicle).
+      DATA(ls_row) = VALUE zvehicle_11(
+        vehicle_uuid          = cl_system_uuid=>create_uuid_x16_static( )
+        make                  = lo_vehicle->mv_make
+        model                 = lo_vehicle->mv_model
+        price                 = lo_vehicle->mv_price
+        currency              = 'EUR'
+        color                 = lo_vehicle->mv_color
+        created_by            = sy-uname
+        created_at            = lv_timestamp
+        local_last_changed_at = lv_timestamp
+      ).
+
+      "Check if Truck or Bus via Downcasting:
+      TRY.
+        DATA(lo_truck) = CAST lcl_truck( lo_vehicle ).
+        ls_row-vehicle_type = 'TRUCK'.
+        ls_row-cargo        = lo_truck->mv_cargo.
+      CATCH cx_sy_move_cast_error.
+        DATA(lo_bus) = CAST lcl_bus( lo_vehicle ).
+        ls_row-vehicle_type = 'BUS'.
+        ls_row-seats        = lo_bus->mv_seats.
+      ENDTRY.
+
+      APPEND ls_row TO lt_db.
+    ENDLOOP.
+
+    "Save into the database table
+    DELETE FROM zvehicle_11. "Clears old data
+    INSERT zvehicle_11 FROM TABLE @lt_db.
+    COMMIT WORK.
+
+    io_out->write( '===> All fleet vehicles successfully synced to Fiori Database! <===' ).
+ENDMETHOD.
+
 ENDCLASS.

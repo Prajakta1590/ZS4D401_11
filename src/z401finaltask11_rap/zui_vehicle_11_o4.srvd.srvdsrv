@@ -1,0 +1,4 @@
+@EndUserText.label: 'Service Definition & Binding'
+define service ZUI_VEHICLE_11_O4 {
+  expose ZC_VEHICLE_11;
+}

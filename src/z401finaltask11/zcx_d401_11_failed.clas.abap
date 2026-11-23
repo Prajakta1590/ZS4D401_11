@@ -1,4 +1,4 @@
-CLASS zcx_d401_11_failed DEFINITION
+ CLASS zcx_d401_11_failed DEFINITION
   PUBLIC
   INHERITING FROM cx_static_check
   FINAL
